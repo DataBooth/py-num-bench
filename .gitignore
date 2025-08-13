@@ -1,5 +1,6 @@
 # Extras
 .vscode/
+*.dylib
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

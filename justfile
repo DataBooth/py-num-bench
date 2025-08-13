@@ -51,9 +51,10 @@ build-cpp:
 # Build Rust shared libs
 build-rust:
     cd {{SRC}}/rust/sieve_rs && cargo build --release
-    cp target/release/libsieve_rs.dylib {{SRC}}/rust/
+    cp {{SRC}}/rust/sieve_rs/target/release/libsieve_rs.dylib {{SRC}}/rust/
     cd {{SRC}}/rust/trapezoid_rs && cargo build --release
-    cp target/release/libtrapezoid_rs.dylib {{SRC}}/rust/
+    cp {{SRC}}/rust/trapezoid_rs/target/release/libtrapezoid_rs.dylib {{SRC}}/rust/
+
 
 # Build Cython
 build-cython:
