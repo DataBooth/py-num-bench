@@ -2,6 +2,16 @@
 # This file controls benchmark parameters, formatting, tolerances, and other tunable settings for the project.
 # All values here are read by main.py at runtime.
 # ===================================================
+# Languages to enable: Keys = language code used in code
+# Values = subpackage names under `<pkg_root>.implementations`
+# -------------------------
+[languages]
+python = "python"
+cython = "cython"
+c = "c"
+cpp = "cpp"
+rust = "rust"
+
 [format]
 # Number of significant figures to display for execution times in seconds
 time_sigfigs = 5

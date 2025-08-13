@@ -1,23 +1,12 @@
 import ctypes
+import importlib
 import importlib.resources as pkg_resources
 import sys
 import tomllib
 from pathlib import Path
 
 from py_num_bench.core import Benchmark, BenchmarkSuite
-from py_num_bench.implementations.python import sieve as sieve_py
-from py_num_bench.implementations.python import trapezoid as trapezoid_py
-
-try:
-    from py_num_bench.implementations.cython.sieve_cython import sieve_cython
-except ImportError:
-    sieve_cython = None
-
-try:
-    from py_num_bench.implementations.cython.trapezoid_cython import trapezoid_cython
-except ImportError:
-    trapezoid_cython = None
-
+import py_num_bench.implementations.python as py_impl_root
 
 # ---------------------------
 # Config
@@ -30,17 +19,39 @@ FMT_CFG = CONFIG["format"]
 SIEVE_CFG = CONFIG["sieve"]
 TRAP_CFG = CONFIG["trapezoid"]
 
-PKG_C = "py_num_bench.implementations.c"
-PKG_RUST = "py_num_bench.implementations.rust"
+# ---------------------------
+# Dynamic package root detection
+# ---------------------------
+PKG_ROOT = py_impl_root.__package__.rsplit(".implementations.python", 1)[0]
+# e.g. "py_num_bench"
+PKG_IMPL = f"{PKG_ROOT}.implementations"  # base for other languages
+
+# Load language packages from config.toml
+# Example in config.toml:
+# [languages]
+# python = "python"
+# cython = "cython"
+# c      = "c"
+# cpp    = "cpp"
+# rust   = "rust"
+LANG_PKG = {
+    lang: f"{PKG_IMPL}.{subpkg}" for lang, subpkg in CONFIG["languages"].items()
+}
+
+# ---------------------------
+# Algorithm signatures
+# ---------------------------
+ALGO_SIGS = {
+    "sieve": ([ctypes.c_int, ctypes.POINTER(ctypes.c_int)], ctypes.c_int),
+    "trapezoid": ([ctypes.c_double, ctypes.c_double, ctypes.c_int], ctypes.c_double),
+}
 
 
 # ---------------------------
 # Helpers
 # ---------------------------
 def lib_filename(base: str, lang: str) -> str:
-    """Return correct shared library filename for a given language."""
-    if lang == "c":
-        # C builds produce .so even on macOS
+    if lang in ("c", "cpp"):  # both built as .so in GCC/Clang for your project
         return f"{base}.so"
     if lang == "rust":
         if sys.platform.startswith("darwin"):
@@ -53,7 +64,6 @@ def lib_filename(base: str, lang: str) -> str:
 
 
 def load_lib_function(pkg: str, lib_file: str, func_name: str, argtypes, restype=None):
-    """Generic shared library loader for ctypes functions."""
     try:
         with pkg_resources.as_file(pkg_resources.files(pkg) / lib_file) as lib_path:
             if not lib_path.exists():
@@ -69,117 +79,118 @@ def load_lib_function(pkg: str, lib_file: str, func_name: str, argtypes, restype
         return None
 
 
+def wrap_algorithm(algo: str, lang: str, func):
+    """
+    Normalise raw impl to a benchmark-friendly (n,) signature.
+    """
+    if not func:
+        return None
+
+    if algo == "sieve":
+        if lang in ("c", "cpp", "rust"):
+
+            def sieve_wrapper(n):
+                arr = (ctypes.c_int * (n + 1))()
+                count = func(n, arr)
+                return [arr[i] for i in range(count)]
+
+            return sieve_wrapper
+        # python / cython already take (n,)
+        return func
+
+    if algo == "trapezoid":
+        a, b_lim = TRAP_CFG.get("a", 0.0), TRAP_CFG.get("b", 1.0)
+        return lambda n: func(a, b_lim, n)
+
+    return func
+
+
+def load_impl(algorithm: str, lang: str):
+    argtypes, restype = ALGO_SIGS[algorithm]
+    pkg_base = LANG_PKG[lang]
+
+    # Python
+    if lang == "python":
+        mod = importlib.import_module(f"{pkg_base}.{algorithm}")
+        func = getattr(mod, f"{algorithm}_py", getattr(mod, algorithm, None))
+        return wrap_algorithm(algorithm, lang, func)
+
+    # Cython
+    if lang == "cython":
+        try:
+            mod = importlib.import_module(f"{pkg_base}.{algorithm}_cython")
+            func = getattr(mod, f"{algorithm}_cython")
+            return wrap_algorithm(algorithm, lang, func)
+        except (ImportError, AttributeError):
+            return None
+
+    # C / C++
+    if lang in ("c", "cpp"):
+        base_name = f"lib{algorithm}" + (f"_{lang}" if lang != "c" else "")
+        lib_file = lib_filename(base_name, lang)
+
+        # C sieve usually has `sieve_c`, others match algorithm name
+        func_name = (
+            f"{algorithm}_{lang}"
+            if lang != "c"
+            else (f"{algorithm}_c" if algorithm == "sieve" else algorithm)
+        )
+        raw_func = load_lib_function(pkg_base, lib_file, func_name, argtypes, restype)
+        return wrap_algorithm(algorithm, lang, raw_func)
+
+    # Rust
+    if lang == "rust":
+        base_name = f"lib{algorithm}_rs"
+        lib_file = lib_filename(base_name, lang)
+        func_name = f"{algorithm}_rs"
+        raw_func = load_lib_function(pkg_base, lib_file, func_name, argtypes, restype)
+        return wrap_algorithm(algorithm, lang, raw_func)
+
+    return None
+
+
 # ---------------------------
 # Algorithm Benchmark class
 # ---------------------------
 class AlgorithmBenchmark:
-    def __init__(self, name, inputs, arg_func, tolerance):
+    def __init__(self, name, algo_key, inputs, arg_func, tolerance):
         self.name = name
+        self.algo_key = algo_key
         self.inputs = inputs
         self.arg_func = arg_func
         self.benchmark = Benchmark(name, tolerance=tolerance)
 
-    def register_python(self, func):
-        self.benchmark.register("Python", func)
-
-    def register_cython(self, func):
-        if func:
-            self.benchmark.register("Cython", func)
-
-    def register_c(self, func):
-        if func:
-            self.benchmark.register("C", func)
-
-    def register_rust(self, func):
-        if func:
-            self.benchmark.register("Rust", func)
+    def register_all_langs(self, langs):
+        for lang in langs:
+            impl = load_impl(self.algo_key, lang)
+            if impl:
+                self.benchmark.register(lang.capitalize(), impl)
 
 
 # ---------------------------
-# Create Benchmarks
+# Create Benchmarks from config langs
 # ---------------------------
+enabled_langs = list(LANG_PKG.keys())  # From config (and packages exist)
 
 # Prime Sieve
 sieve_bench = AlgorithmBenchmark(
     "Prime Sieve",
+    algo_key="sieve",
     inputs=SIEVE_CFG["inputs"],
     arg_func=lambda n: (n,),
     tolerance=SIEVE_CFG.get("tolerance", 1e-9),
 )
-sieve_bench.register_python(sieve_py.sieve_py)
-sieve_bench.register_cython(sieve_cython)
+sieve_bench.register_all_langs(enabled_langs)
 
-# C implementation
-_c_sieve = load_lib_function(
-    PKG_C,
-    lib_filename("libsieve", "c"),
-    "sieve_c",  # function name in the C code
-    [ctypes.c_int, ctypes.POINTER(ctypes.c_int)],
-    ctypes.c_int,
-)
-if _c_sieve:
-
-    def sieve_c(n):
-        arr = (ctypes.c_int * (n + 1))()
-        count = _c_sieve(n, arr)
-        return [arr[i] for i in range(count)]
-
-    sieve_bench.register_c(sieve_c)
-
-# Rust implementation
-_rust_sieve = load_lib_function(
-    PKG_RUST,
-    lib_filename("libsieve_rs", "rust"),
-    "sieve_rs",
-    [ctypes.c_int, ctypes.POINTER(ctypes.c_int)],
-    ctypes.c_int,
-)
-if _rust_sieve:
-
-    def sieve_rust(n):
-        arr = (ctypes.c_int * (n + 1))()
-        count = _rust_sieve(n, arr)
-        return [arr[i] for i in range(count)]
-
-    sieve_bench.register_rust(sieve_rust)
-
-# ---------------------------
-# Trapezoid Integration
-# ---------------------------
+# Trapezoid
 trap_bench = AlgorithmBenchmark(
     "Trapezoidal Integration",
+    algo_key="trapezoid",
     inputs=TRAP_CFG["inputs"],
     arg_func=lambda n: (n,),
     tolerance=TRAP_CFG.get("tolerance", 1e-8),
 )
-
-a, b_lim = TRAP_CFG.get("a", 0.0), TRAP_CFG.get("b", 1.0)
-trap_bench.register_python(lambda n: trapezoid_py.trapezoid_py(a, b_lim, n))
-trap_bench.register_cython(
-    lambda n: trapezoid_cython(a, b_lim, n) if trapezoid_cython else None
-)
-
-# C trapezoid
-_c_trap = load_lib_function(
-    PKG_C,
-    lib_filename("libtrapezoid", "c"),
-    "trapezoid",
-    [ctypes.c_double, ctypes.c_double, ctypes.c_int],
-    ctypes.c_double,
-)
-if _c_trap:
-    trap_bench.register_c(lambda n: _c_trap(a, b_lim, n))
-
-# Rust trapezoid
-_rust_trap = load_lib_function(
-    PKG_RUST,
-    lib_filename("libtrapezoid_rs", "rust"),
-    "trapezoid_rs",
-    [ctypes.c_double, ctypes.c_double, ctypes.c_int],
-    ctypes.c_double,
-)
-if _rust_trap:
-    trap_bench.register_rust(lambda n: _rust_trap(a, b_lim, n))
+trap_bench.register_all_langs(enabled_langs)
 
 # ---------------------------
 # Main
