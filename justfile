@@ -1,3 +1,6 @@
+ROOT := justfile_directory()
+SRC := ROOT + "/src/py_num_bench/implementations"
+
 # Default list recipe
 default:
     @just --list
@@ -35,29 +38,43 @@ create-structure:
     touch src/py_num_bench/implementations/rust/trapezoid_rs/Cargo.toml
     touch src/py_num_bench/implementations/rust/trapezoid_rs/src/lib.rs
 
-all: build-cython build-c build-cpp build-rust
-
-build-cython:
-    cd src/py_num_bench/implementations/cython && python setup.py build_ext --inplace
-
+# Build C shared libs
 build-c:
-    gcc -O3 -shared -fPIC src/py_num_bench/implementations/c/sieve.c -o src/py_num_bench/implementations/c/libsieve.so
-    gcc -O3 -shared -fPIC src/py_num_bench/implementations/c/trapezoid.c -o src/py_num_bench/implementations/c/libtrapezoid.so
+    gcc -O3 -fPIC -shared -o {{SRC}}/c/libsieve.so {{SRC}}/c/sieve.c
+    gcc -O3 -fPIC -shared -o {{SRC}}/c/libtrapezoid.so {{SRC}}/c/trapezoid.c
 
+# Build C++ shared libs
 build-cpp:
-    c++ -O3 -Wall -shared -std=c++17 -fPIC \
-        `python3 -m pybind11 --includes` \
-        src/py_num_bench/implementations/cpp/sieve.cpp \
-        -o sieve_cpp`python3-config --extension-suffix`
-    c++ -O3 -Wall -shared -std=c++17 -fPIC \
-        `python3 -m pybind11 --includes` \
-        src/py_num_bench/implementations/cpp/trapezoid.cpp \
-        -o trapezoid_cpp`python3-config --extension-suffix`
+    g++ -O3 -fPIC -shared -o {{SRC}}/cpp/libsieve_cpp.so {{SRC}}/cpp/sieve.cpp
+    g++ -O3 -fPIC -shared -o {{SRC}}/cpp/libtrapezoid_cpp.so {{SRC}}/cpp/trapezoid.cpp
 
+# Build Rust shared libs
 build-rust:
-    cd src/py_num_bench/implementations/rust/sieve_rs && maturin develop --release
-    cd src/py_num_bench/implementations/rust/trapezoid_rs && maturin develop --release
+    cd {{SRC}}/rust/sieve_rs && cargo build --release
+    cp target/release/libsieve_rs.dylib {{SRC}}/rust/
+    cd {{SRC}}/rust/trapezoid_rs && cargo build --release
+    cp target/release/libtrapezoid_rs.dylib {{SRC}}/rust/
 
+# Build Cython
+build-cython:
+    cd {{SRC}}/cython && uv run setup.py build_ext --inplace
+
+# Clean artifacts
 clean:
-    find . -type f \( -name "*.so" -o -name "*.pyd" -o -name "*.egg-info" \) -delete
-    rm -rf build dist .pytest_cache **/target
+    rm -f {{SRC}}/c/*.so {{SRC}}/cpp/*.so {{SRC}}/rust/*.dylib {{SRC}}/cython/*.so
+    rm -rf {{SRC}}/cython/build
+
+    # Clean Rust build artifacts via cargo clean for each Rust crate
+    cd {{SRC}}/rust/sieve_rs && cargo clean
+    cd {{SRC}}/rust/trapezoid_rs && cargo clean
+
+# Convenience meta-targets
+build-all: build-c build-cpp build-rust build-cython
+
+# Show the root directory
+show-root:
+    @echo {{ROOT}}
+
+# Show the src directory
+show-src:
+    @echo {{SRC}}

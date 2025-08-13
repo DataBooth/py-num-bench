@@ -1,8 +1,14 @@
+import os
+from setuptools import setup, Extension
 from Cython.Build import cythonize
-from setuptools import setup
+
+this_dir = os.path.dirname(os.path.abspath(__file__))
+
+extensions = [
+    Extension("sieve_cython", [os.path.join(this_dir, "sieve_cython.pyx")]),
+    Extension("trapezoid_cython", [os.path.join(this_dir, "trapezoid_cython.pyx")]),
+]
 
 setup(
-    name="py_num_bench_cython_extensions",
-    ext_modules=cythonize(["sieve_cython.pyx", "trapezoid_cython.pyx"]),
-    zip_safe=False,
+    ext_modules=cythonize(extensions, compiler_directives={"language_level": "3"}),
 )

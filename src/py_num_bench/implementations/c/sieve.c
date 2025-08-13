@@ -6,27 +6,30 @@
      count   - pointer to store number of primes found
 */
 
+#include <math.h>
 #include <stdlib.h>
-#include <stdbool.h>
 
-void sieve(int n, int* primes, int* count) {
-    bool* is_prime = malloc((n+1) * sizeof(bool));
-    if (!is_prime) return;
-    for (int i = 0; i <= n; ++i) is_prime[i] = true;
-    is_prime[0] = false;
-    is_prime[1] = false;
+// Returns number of primes <= n, fills primes_out array (must be size >= n+1)
+int sieve_c(int n, int *primes_out) {
+    char *is_prime = calloc(n + 1, sizeof(char));
+    if (!is_prime) return -1;
 
-    for (int i = 2; i*i <= n; ++i) {
-        if (is_prime[i]) {
-            for (int j = i*i; j <= n; j += i)
-                is_prime[j] = false;
+    for (int i = 2; i <= n; i++) is_prime[i] = 1;
+
+    for (int p = 2; p <= sqrt(n); p++) {
+        if (is_prime[p]) {
+            for (int k = p * p; k <= n; k += p)
+                is_prime[k] = 0;
         }
     }
 
-    int k = 0;
-    for (int i = 2; i <= n; ++i) {
-        if (is_prime[i]) primes[k++] = i;
+    int count = 0;
+    for (int i = 2; i <= n; i++) {
+        if (is_prime[i]) {
+            primes_out[count++] = i;
+        }
     }
-    *count = k;
+
     free(is_prime);
+    return count;
 }

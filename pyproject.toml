@@ -6,9 +6,11 @@ readme = "README.md"
 authors = [{ name = "Michael Booth", email = "michael@databooth.com.au" }]
 requires-python = ">=3.13"
 dependencies = [
+    "cython>=3.1.2",
     "numpy>=2.3.2",
     "plotly>=6.2.0",
     "pybind11>=3.0.0",
+    "pyperf>=2.9.0",
     "setuptools>=80.9.0",
     "tabulate>=0.9.0",
 ]
@@ -19,3 +21,9 @@ py-num-bench = "py_num_bench:main"
 [build-system]
 requires = ["uv_build>=0.8.8,<0.9.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-rich>=0.2.0",
+]
