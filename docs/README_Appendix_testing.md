@@ -6,7 +6,7 @@
    - Compare output of each implementation against a reference Python version for a known set of inputs.
    - Set up assertions for value equality and edge case handling (zero, negatives, large N, etc).
 2. **Property-Based Testing**:  
-   - For numerical algorithms, utilize libraries (e.g. `hypothesis` in Python) to generate random valid input sets.
+   - For numerical algorithms, utilise libraries (e.g. `hypothesis` in Python) to generate random valid input sets.
    - Check properties like monotonicity, bounds, and invariants.
 3. **Round-trip Consistency**:  
    - For algorithms with invertible operations, ensure computed outputs are reversible or reconstruct initial inputs.
@@ -247,7 +247,7 @@ def test_cython_sieve():
 
 ***
 
-## How to Add/Generalize Testing for More Involved Algorithms
+## How to Add/Generalise Testing for More Involved Algorithms
 
 - **Strategy:**  
   Always create a pure Python “ground truth” implementation that is easy to read, debug, and assert on.  

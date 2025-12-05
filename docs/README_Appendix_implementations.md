@@ -43,7 +43,7 @@
 
 ***
 
-## Generalizing for More Involved Algorithms
+## Generalising for More Involved Algorithms
 
 As you target **more complex and computationally demanding algorithms**:
 - **Data types and structures become more important:**  
@@ -55,7 +55,7 @@ As you target **more complex and computationally demanding algorithms**:
 - **Testing and validation**:  
   Is even more critical: always build a high-quality reference implementation (often in Python) to compare against.
 - **Performance tuning**:  
-  Use benchmarking to guide optimization effort. For some problems, algorithmic improvements in Python may yield larger speedups than migrating to C/C++/Rust.
+  Use benchmarking to guide optimisation effort. For some problems, algorithmic improvements in Python may yield larger speedups than migrating to C/C++/Rust.
 
 ### Key Takeaway
 
@@ -78,7 +78,7 @@ Migrating well-defined numeric algorithms to C/C++/Rust for Python performance i
 - **Cython:**  
   A language that mixes Python and C. Cython code is compiled to C, producing fast Python modules that can directly integrate C code.
 
-- **RAII (Resource Acquisition Is Initialization):**  
+- **RAII (Resource Acquisition Is Initialisation):**  
   A C++/Rust technique where resource management (memory, file handles) is tied to object construction/destruction, reducing manual cleanup errors.
 
 - **STL (Standard Template Library):**  
